@@ -1,0 +1,113 @@
+<html>
+    <head>
+        <title>Twitter time</title>
+        <script type="text/javascript" src="jquery.js"></script>
+        <script type="text/javascript" src="jquery-jsonp.js"></script>
+        <script type="text/javascript" src="jquery-twitter.js"></script>
+        <script type="text/javascript" src="underscore-min.js"></script>
+        <script type="text/javascript">
+        bigrams = {};
+        function updateBigrams(data){
+            _.each(data.results, function(res){
+                //console.log(res.text);
+                //console.log(symbolize(res.text));
+                var symbols = symbolize(res.text);
+                var offset = _(symbols).tail();
+                offset.push("#END#");
+                _.each(_.zip(offset, symbols), function(bigram){
+                    bigrams[bigram[1]] = bigrams[bigram[1]] || {};
+                    bigrams[bigram[1]][bigram[0]] = bigrams[bigram[1]][bigram[0]] + 1 || 1;
+                });
+            });
+        }
+        
+        function updateTime(){
+            bigrams = {};
+            var time = $("input:text").val();
+            $.twitter.statuses.publicTimeline(updateBigrams, {"rpp" : 100});
+            $.twitter.search(time, function(data){
+                updateBigrams(data);
+                
+                var symtime = symbolize(time);
+                var tok = symtime[symtime.length-1];
+                var output = _.first(symtime, symtime.length-1).join(" ") + " ";
+                var iter
+                //while(tok == "#END#"){
+                for(var i = 0; i < 60 && tok != "#END#"; i++){
+                    output += tok;
+                    output += " ";
+                    
+                    values = _(bigrams[tok]).chain().values().scanl(0, function(a, b){return a + b;}).value();                
+                    rnd = Math.floor(Math.random() * values[values.length-1]) + 1;
+                    //console.log(rnd, _.zip(values, _.keys(bigrams[tok])));
+                    tok = _.reduce(_.zip(values, _.keys(bigrams[tok])), false, function(m, v){
+                        if(m)
+                            return m;
+                        if(rnd <= v[0]){
+                            return v[1];
+                        }
+                        return false;
+                   });
+                }
+                
+                if(output.split(symbolize(time).join(" ")).length >= 3){
+                    console.log(symbolize(time).join(" "));
+                    output = _.rest(output.split(" "), symtime.length).join(" ");
+                }
+                
+                $("#result").html(output);
+                    
+            },{"rpp" : 100});
+        }
+        
+        _.mixin({
+                scanl : function(list, memo, iter){
+                    return this.reduce(list, [memo, []], function(memo, v){
+                        var rv = iter(memo[0], v);
+                        var hist = memo[1];
+                        hist.push(rv);
+                        return [rv, hist];
+                    })[1];
+                }
+            });
+        
+        function symbolize(str){
+            str = str.toLowerCase();
+            str = str.replace(/((http:\/\/)|(www))[^ ]*/gi, " ");
+            str = str.replace(/&[a-z]{1,6}/gi, "");
+            str = str.replace(/[^a-z]/gi, " ");
+            str = str.replace(/ +/g, " ");
+            return $.trim(str).split(" ");
+        }
+        
+        
+        $(document).ready(function(){
+            $("input:button").bind("click", updateTime);
+        });
+        
+        
+        </script>
+    </head>
+    <body>
+    <p>
+        This Peggy clock uses twitter, the ultimate source of randomness and crowdsourced data, to let the user know what time it is while having a little laugh. The key feature is a <a href="http://en.wikipedia.org/wiki/Markov_Chain">Markov Chain</a> text generator that uses recent tweets about the time to generate a little blurb. This blurb will, with luck, contain some info about recent happenings, such as earthquakes, TV, or other trending topics.
+    </p>
+    <p>
+        The Peggy is largely unmodified. As cool as it would be to use crazy LED patterns, it will be most readable in a single, solid color. Depending on how reliably text can be generated, it might be interesting to do 1 row of text (5 rows of LEDs) in a contrasting color. This could then be positioned to highlight the fuzzy time.
+    </p>
+    <p>
+        The <a href="http://www.theiling.de/projects/liquid.html">Liquid Wee</a> font, which is openly available, is a really great & readable condensed font. The letters are just 5px tall! This allows for the best use of the limited display. 
+    </p>
+    <p>
+        However, the Peggy would connect to a computer/server over XBee. This would provide a reliable (and dead easy) serial connection so Peggy can be moved around. The backend script would be powered by python. I have a Markov text generator already written, but I (really quickly) threw together this javascript example to give an example of the craziness.<!-- PLEASE don't look at the source. Or at least don't judge me. I didn't use *that* many libraries... My C code is way better, and not written in an hour. -->
+    </p>
+    <p>
+        Try different words! Although fuzzy times in quotes tend to provide the most pertinent tweets, you can also play with completely random queries. It is seeded with the first 100 results for the search phrase, plus the last 100 tweets in the public timeline.
+    </p>
+    <div>
+        <input type="text" value='"seven thirty"'>
+        <input type="button" value='get real time'>
+    </div>
+    <div id="result"></div>
+    </body>
+</html>
